@@ -1,0 +1,253 @@
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"
+    />
+    <title>Who's Funding Gun Policy? - Sam Olagun</title>
+    <script src="https://d3js.org/d3.v4.js"></script>
+    <script
+      type="text/javascript"
+      src="https://d3js.org/queue.v1.min.js"
+    ></script>
+    <script
+      type="text/javascript"
+      src="https://d3js.org/topojson.v1.min.js"
+    ></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/brands.min.css"
+    />
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"
+      integrity="sha512-WFN04846sdKMIP5LKNphMaWzU7YpMyCU245etK3g/2ARYbPK9Ub18eG+ljU96qKRCWh+quCY7yefSmlkQw1ANQ=="
+      crossorigin="anonymous"
+    ></script>
+    <link href="main.css" rel="stylesheet" />
+  </head>
+  <body>
+    <article>
+      <!-- Header -->
+      <hgroup>
+        <ul>
+          <li>
+            <a href="#"><i class="fab fa-facebook-square"></i></a>
+          </li>
+          <li>
+            <a href="#"><i class="fa fa-twitter"></i></a>
+          </li>
+        </ul>
+
+        <h1>Who's Funding Gun Policy?</h1>
+        <h2>
+          Dissecting how US gun policy is financed by corporate lobbyists and
+          PACs.
+        </h2>
+        <div class="byline">
+          by <span class="underline">Sam Olagun, April 15, 2021</span>
+        </div>
+      </hgroup>
+
+      <!-- Intro -->
+      <section>
+        <p>
+          Gun violence is a growing public healh issue in the U.S.. Although the
+          data indicates that
+          <a
+            href="https://www.pewresearch.org/fact-tank/2019/10/16/share-of-americans-who-favor-stricter-gun-laws-has-increased-since-2017/"
+          >
+            American's are increasing in suppport of stricter gun laws </a
+          >, congress is doing little to change the status quo. What's most
+          concering is that PAC's (Public Action Committees), political
+          organizations that lobby against might have something to do with it.
+          U.S. congresspersons recived a total of $10,205,036 from gun rights
+          lobbying groups and a mere $2,100,000 from gun control groups just
+          this year. Capital is known to be incredible important on Captiol
+          hill. This begs the question: who's funding our gun policy?
+        </p>
+      </section>
+    </article>
+
+    <div class="years"></div>
+
+    <div id="figure">
+      <div class="metadata">
+        <div class="lobbyist"></div>
+        <div class="price"></div>
+      </div>
+    </div>
+
+    <article>
+      <div>
+        <h3>Sources and Notes</h3>
+        <h4>
+          The data used in this article was sourced from the
+          <a href="https://www.opensecrets.org/">Open Secrets </a> Gun Rights
+          vs. Gun control database.
+        </h4>
+      </div>
+    </article>
+
+    <script type="text/javascript">
+      var width = window.innerWidth;
+      var height = 500;
+
+      var svg = d3
+        .select("#figure")
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height);
+
+      queue().defer(d3.csv, "lobbying.csv").await(onFinish);
+
+      function cleanData(data) {
+        function formatNumber(string) {
+          return parseInt(string.substring(1).replaceAll(",", ""), 10);
+        }
+
+        var output = [];
+
+        for (var object of data) {
+          var gunControl = formatNumber(object["Gun_Control"]);
+          var gunRights = formatNumber(object["Gun_Rights"]);
+
+          if (gunControl > 0) {
+            output.push({
+              name: object["PAC Name"],
+              year: parseInt(object["cycle"], 10),
+              type: "gun_control",
+              amount: gunControl
+            });
+          }
+
+          if (gunRights > 0) {
+            output.push({
+              name: object["PAC Name"],
+              year: parseInt(object["cycle"], 10),
+              type: "gun_rights",
+              amount: gunRights
+            });
+          }
+        }
+
+        return output;
+      }
+
+      function onFinish(error, data) {
+        var originalData = cleanData(data);
+        var currentData = originalData;
+
+        var years = Object.keys(_.groupBy(originalData, "year"));
+        years = years.map(function (year) {
+          return parseInt(year, 10);
+        });
+
+        years.sort();
+
+        var yearNode = d3.select(".years");
+
+        yearNode
+          .selectAll("div")
+          .data(years)
+          .enter()
+          .append("div")
+          .html(function (year) {
+            return year;
+          })
+          .on("click", function (year) {
+            updateYear(year);
+          });
+
+        var scale = d3.scaleLinear().domain([0, 21_000_000]).range([20, 100]);
+
+        function updateYear(year) {
+          currentData = originalData.filter((datum) => datum.year === year);
+
+          var simulation = d3
+            .forceSimulation(currentData)
+            .force("charge", d3.forceManyBody().strength(5))
+            .force(
+              "x",
+              d3.forceX().x(function (d) {
+                return d.type === "gun_control" ? width * 0.33 : width * 0.66;
+              })
+            )
+            .force(
+              "y",
+              d3.forceY().y(function (d) {
+                return height / 2;
+              })
+            )
+            .force(
+              "collision",
+              d3.forceCollide().radius(function (d) {
+                return scale(d.amount);
+              })
+            )
+            .on("tick", tick);
+
+          function tick() {
+            var currentCircles = svg
+              .selectAll("circle")
+              .data(currentData, function (d) {
+                return d.name;
+              });
+
+            var currentText = svg
+              .selectAll("text")
+              .data(currentData, function (d) {
+                return d.name;
+              });
+
+            var circles = currentCircles
+              .enter()
+              .append("circle")
+              .style("fill", function (d) {
+                return d.type === "gun_control" ? "green" : "blue";
+              })
+              .merge(currentCircles)
+              .attr("r", function (d) {
+                return scale(d.amount);
+              })
+              .attr("cx", function (d) {
+                return d.x;
+              })
+              .attr("cy", function (d) {
+                return d.y;
+              })
+              .on("mouseover", function (d) {
+                var lobbyist = d3.select(".lobbyist");
+                var price = d3.select(".price");
+
+                lobbyist.html(d.name);
+                price.html(d.amount);
+              });
+
+            currentCircles.exit().remove();
+
+            currentText
+              .enter()
+              .append("text")
+              .merge(currentText)
+              .style("font-size", "14px")
+              .style("text-anchor", "middle")
+              .attr("x", function (d) {
+                return d.x;
+              })
+              .attr("y", function (d) {
+                return d.y;
+              })
+              .text(function (d) {
+                return scale(d.amount) > 30 ? d.name : "";
+              });
+
+            currentText.exit().remove();
+          }
+        }
+
+        updateYear(2020);
+      }
+    </script>
+  </body>
+</html>
